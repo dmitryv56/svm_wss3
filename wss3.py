@@ -8,6 +8,12 @@ import sys
 
 import numpy as np
 import math
+import datetime
+import uuid
+
+
+LOG_FILE = ''.join(["svm", datetime.datetime.now().strftime("_%H%M%S_"), uuid.uuid1().hex, ".log"])
+f = None  # output file
 
 class wss(object):
     """
@@ -16,6 +22,7 @@ class wss(object):
 
     eps=1e-03  # stopping tolerance
     tau=1e-12
+    insignificant_level = 0.5
     n_instances = 0
     log_file=None
     dbg_log=None
@@ -52,7 +59,9 @@ class wss(object):
         self.A = np.zeros((self.n_instances), dtype=np.float64)
         self.G = np.ones((self.n_instances), dtype=np.float64)
         self.G = self.G * (-1)
-        self.C = 10.0
+        self.C = 2.0
+        self.w = np.zeros((self.m), dtype=np.float64)
+        self.b = 0.0
 
 
     def createKernel(self,kernel_type, d=1, k=1.0, c=-1.0):
@@ -66,7 +75,9 @@ class wss(object):
         if kernel_type == "gauss":
             self.kernel = "gauss"
             func="rbfgauss"
-
+        if kernel_type == "linear":
+            self.kernel="limear"
+            func="linear"
         if kernel_type == "rbf":
             self.kernel = "rbf"
             func="rbfgauss"
@@ -119,6 +130,9 @@ class wss(object):
 
         return math.exp(-(norm*norm)/(2.0*std*std))
 
+    def linear(self, ind_i, ind_j):
+        return self.dot_x_y(ind_i,ind_j)
+
     def polyn(self, ind_i,ind_j):
 
         return math.pow( (self.dot_x_y(ind_i,ind_j) + 1.0), self.kernel_arg[0])
@@ -162,7 +176,7 @@ class wss(object):
 
 
 
-    def mainFlow(self):
+    def trainingFlow(self):
         pass
 
         self.kernel2Q()
@@ -253,6 +267,53 @@ class wss(object):
         return i,j
 
 
+    def set_model_params(self):
+
+        self.A_max = 0.0
+
+        for i in range(self.n_instances):
+            if abs(self.A[i]) > self.A_max:
+                self.A_max=abs(self.A[i])
+
+        for j in range(self.m):
+            self.w[j]=0.0
+            for i in range(self.n_instances):
+                self.w[j]+=self.A[i]*self.y[i]*self.x[i][j]
+
+        self.b=0.0
+        max_product=-1.0/self.tau
+        min_product=1.0/self.tau
+
+        for i in range(self.n_instances):
+            vect_product=np.dot(self.x[i], self.w)
+            if self.y[i]==1 and vect_product<min_product:
+                min_product = vect_product
+            elif self.y[i] == -1 and vect_product>max_product:
+                max_product=vect_product
+
+        self.b=-(max_product+min_product)/2.0
+
+
+
+    def testingFlow(self, x ):
+        """
+
+        :return:
+        """
+
+        for i in range(self.n_instances):
+            if abs(self.A[i])<self.insignificant_level*self.A_max:
+                continue
+
+        res=self.b
+        res=res + np.dot(self.x[i],x) * self.A[i]*self.y[i]+self.b
+
+        if res >0.0:
+            ret_label =1
+        else:
+            ret_label = -1
+
+        return ret_label
 
 
 
@@ -261,21 +322,52 @@ class wss(object):
 
 
 
+
+def main(args, f):
+    """
+
+    :param args:
+    :param f:
+    :return:
+    """
+
+    input_matrix = np.array([[2.0, 4.0],
+                             [2.0, 2.0],
+                             [4.0, 2.0],
+                             [4.0, 5.0],
+                             [5.0, 9.0],
+                             [5.0, 1.0],
+                             [6.0, 4.0],
+                             [8.0, 5.0],
+                             [9.0, 1.0],
+                             [10.0,6.0],
+                             [4.0, 4.1]])
+
+    output_vector = np.array([-1, -1, -1, 1, 1, -1, 1, 1, 1, 1, 1])
+
+    a = wss(11, 2, input_matrix, output_vector,f,True )
+    print(a.eps)
+    print(a.tau)
+
+    a.createKernel("linear")
+    a.Ker
+
+    a.trainingFlow()
+    a.set_model_params()
+
+    x_test=np.array([[1,1],[-2,10]])
+
+    print(a.testingFlow(x_test[0]))
+    print(a.testingFlow( x_test[1]) )
+
+    pass
 
 
 if __name__ == "__main__":
+    f = open(LOG_FILE, 'w')
+    main(sys.argv, f)
+    f.close()
 
-    input_matrix=np.array([[1.0,2,3.0],[1.0,1.9,3.1],[1.0,2.0,2.9], [0,0,5],[1,2,7]])
-    output_vector=np.array([1,1,1,-1,-1])
 
 
-    a=wss(5,3,input_matrix,output_vector)
-    print (a.eps)
-    print(a.tau)
 
-    a.createKernel("gauss")
-    a.Ker
-
-    a.mainFlow()
-
-    pass
