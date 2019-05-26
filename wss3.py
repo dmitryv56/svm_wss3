@@ -4,12 +4,19 @@
 #  ...following to R.E.Fan, P.-H. Chen, C.-J. Lin 'Working set selection Using Second Order Information for
 #  Training Support Vector Machines'-Journal of Machine Learning Research 6, 2005, 1889-1918
 
+
+import os
+from os.path import isdir, join, isfile
 import sys
 
 import numpy as np
 import math
 import datetime
 import uuid
+from PIL import Image
+from traindata import createDataSet, createTestSet
+from config import pos_img_dir, neg_img_dir,flatten_img_len,train_set_pos,train_set_neg
+
 
 
 LOG_FILE = ''.join(["svm", datetime.datetime.now().strftime("_%H%M%S_"), uuid.uuid1().hex, ".log"])
@@ -115,6 +122,17 @@ class wss(object):
 
                 self.Ker[i][j] = getattr(self,func)(i,j)
 
+
+        if self.log_file:
+            print ("\n\nKernel \n", file=self.log_file)
+            [print (*line, file =self.log_file) for line in self.Ker ]
+            #for i in range(self.n_instances):
+            #    for j in range(0, self.n_instances,16):
+            #        for j1 in range (j, j+16 ):
+            #            print ("{} ".format(self.Ker[i][j1]), file=self.log_file)
+            #        print("\n",file=self.log_file )
+
+
     def kernel2Q(self):
 
         for i in range(self.n_instances):
@@ -177,7 +195,10 @@ class wss(object):
 
 
     def trainingFlow(self):
-        pass
+        """
+
+        :return:
+        """
 
         self.kernel2Q()
 
@@ -188,6 +209,7 @@ class wss(object):
 
             # working set is (i,j)
             a = self.Ker[i][i]+self.Ker[j][j] -2 * self.y[i]*self.y[j] * self.Ker[i][j]
+
             if a<=0.0:
                 a = self.tau
 
@@ -224,13 +246,32 @@ class wss(object):
             for t in range(self.n_instances):
                 self.G[t] +=self.Ker[t][i]*deltaAi +self.Ker[t][j]*deltaAj
 
-        pass
+            if self.log_file:
+                print("\n\nGradient for ({} {}) working set. The coefficients are {},{}\n".format(i,j, self.A[i],self.A[j]), file = self.log_file )
+                for t in range(self.n_instances ):
+                    print(self.G[t],end=" ", file=self.log_file)
+                    if t>0 and t%16==0:
+                        print("\n", file =self.log_file)
+
+        # Gradient and coefficients
+
+        if self.log_file:
+            print("\n\nA[] vector\n", file = self.log_file)
+            for t in range(self.n_instances):
+                print(self.A[t], end=" ",file=self.log_file)
+                if t>0 and t%16==0:
+                    print("\n", file = self.log_file )
+
         return
 
 
 
 
     def selectB(self):
+        """
+
+        :return:
+        """
 
 
         #select i
@@ -293,6 +334,14 @@ class wss(object):
 
         self.b=-(max_product+min_product)/2.0
 
+        if self.log_file:
+            print("\n\n model \n\nb = {}\n w[] = \n".format(self.b), file=self.log_file )
+            for t in range(self.m):
+
+                print(self.w[t],end=" ", file=self.log_file)
+                if t>0 and t%16==0:
+                    print("\n", file=self.log_file)
+
 
 
     def testingFlow(self, x ):
@@ -300,13 +349,14 @@ class wss(object):
 
         :return:
         """
+        #ignore small  abs(A[i]) coefficients
+        # for i in range(self.n_instances):
+        #     if abs(self.A[i])<self.insignificant_level*self.A_max:
+        #         continue
 
-        for i in range(self.n_instances):
-            if abs(self.A[i])<self.insignificant_level*self.A_max:
-                continue
-
-        res=self.b
-        res=res + np.dot(self.x[i],x) * self.A[i]*self.y[i]+self.b
+        #res=self.b
+        #res=res + np.dot(self.x[i],x) * self.A[i]*self.y[i]+self.b
+        res=self.b + np.dot(self.w, x)
 
         if res >0.0:
             ret_label =1
@@ -314,7 +364,6 @@ class wss(object):
             ret_label = -1
 
         return ret_label
-
 
 
 
@@ -345,7 +394,10 @@ def main(args, f):
 
     output_vector = np.array([-1, -1, -1, 1, 1, -1, 1, 1, 1, 1, 1])
 
-    a = wss(11, 2, input_matrix, output_vector,f,True )
+    input_data, output_label, _, _ = createDataSet(pos_img_dir, neg_img_dir, train_set_pos, train_set_neg,
+                                                  flatten_img_len)
+
+    a = wss(train_set_pos + train_set_neg, flatten_img_len, input_data,  output_label, f, True )
     print(a.eps)
     print(a.tau)
 
@@ -355,13 +407,30 @@ def main(args, f):
     a.trainingFlow()
     a.set_model_params()
 
-    x_test=np.array([[1,1],[-2,10]])
 
-    print(a.testingFlow(x_test[0]))
-    print(a.testingFlow( x_test[1]) )
+    x_test,_,title_list=createTestSet(pos_img_dir,10,256,flatten_img_len)
+    #x_test=np.array([[1,1],[-2,10]])
+
+    #print(a.testingFlow(x_test[0]))
+    #(a.testingFlow( x_test[1]) )
+
+    for i in range(10):
+        print("{} : {}".format( title_list[i], a.testingFlow(x_test[i])))
 
     pass
 
+
+    x_test1,_,title_list1=createTestSet(neg_img_dir,10,256,flatten_img_len)
+    #x_test=np.array([[1,1],[-2,10]])
+
+    #print(a.testingFlow(x_test[0]))
+    #(a.testingFlow( x_test[1]) )
+
+    for i in range(10):
+        print("{} : {}".format( title_list1[i], a.testingFlow(x_test1[i])))
+
+
+    pass
 
 if __name__ == "__main__":
     f = open(LOG_FILE, 'w')
