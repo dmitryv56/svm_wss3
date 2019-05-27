@@ -15,26 +15,179 @@ import datetime
 import uuid
 from PIL import Image
 from traindata import createDataSet, createTestSet
-from config import pos_img_dir, neg_img_dir,flatten_img_len,train_set_pos,train_set_neg
+from config import pos_img_dir, neg_img_dir,flatten_img_len,train_set_pos,train_set_neg, model_svm_file
+import pickle
+from pathlib import Path
 
 
 
 LOG_FILE = ''.join(["svm", datetime.datetime.now().strftime("_%H%M%S_"), uuid.uuid1().hex, ".log"])
 f = None  # output file
 
-class wss(object):
+class svm(object):
     """
+
+    """
+    def __init__(self, m, model_svm_file=None, log_file=None, dbg_log=None):
+        """
+
+        :param model_file:
+        :param log_file:
+        """
+        self.m_features = m
+        self.w = np.zeros((self.m_features), dtype=np.float64)
+        self.b = 0.0
+
+        self.mdict={"w":None,"b":None,"description":None}
+        self.log_file=log_file
+        self.dbg_log=dbg_log
+
+
+        self.setSVMmodel( model_svm_file )
+
+        return
+    #------------------------------------------------------------------------------------------------------------------>
+    #
+    #
+    def setSVMmodel(self,model_svm_file):
+        self.svm_model_file=model_svm_file
+
+
+    #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+    #
+    #
+    def loadSVMmodel(self):
+        """
+
+        :return:
+        """
+        my_file=Path(self.svm_model_file)
+        if my_file.is_file():
+            self.mdict.clear()
+
+            inputf = open(self.svm_model_file, 'rb')
+
+            self.mdict = pickle.load(inputf)
+
+            inputf.close()
+
+            self.print_dict_data()
+
+        return
+
+    #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+    #
+    #
+    def saveSVMmodel(self,b,w,description):
+        """
+
+        :param b:
+        :param w:
+        :param description:
+        :return:
+        """
+
+        self.mdict.clear()
+        self.mdict['b']           = b
+        self.mdict['w']           = np.copy(w)
+        self.mdict['description'] = description
+        self.print_dict_data()
+
+        output = open(self.svm_model_file, 'wb')
+        pickle.dump(self.mdict, output)
+        output.close()
+
+        return
+
+    #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+    #
+    #
+    def print_dict_data(self):
+        """
+
+        :param x_data:
+        :return:
+        """
+
+        if self.log_file and self.dbg_log:
+            print("\n\nSVM model description : {}\n Model: bias = {} w = \n".format(self.mdict["description"],
+                                                                                    self.mdict["b"]), file=self.log_file)
+            for t in range(self.mdict['w'].size):
+                print((self.mdict['w'])[t], end=" ", file=self.log_file)
+                if t > 0 and t % 16 == 0:
+                    print("\n", file=self.log_file)
+
+
+        return
+    #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+    #
+    #
+    def print_feature_vector(self, x_data):
+        """
+
+        :param x_data:
+        :return:
+        """
+
+        print("\n\nData vector (x) :\n ")
+        for t in range(x_data.size):
+            print(x_data[t], end=" ", file=self.log_file)
+            if t > 0 and t % 16 == 0:
+                print("\n", file=self.log_file)
+
+        return
+
+    #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+    #
+    #
+    def examinate(self, x ):
+        """
+
+        :param x:
+        :return:
+        """
+
+
+        y=np.dot(self.mdict["w"], x ) + self.mdict["b"]
+        if y>=0 :
+            res =1
+        else:
+            res = -1
+
+        ss = np.array2string(self.mdict['w'], precision=4, separator=',', suppress_small=True)
+
+        #print ("\nLabel is {} (y={}) for vector  = \n          {}".format(res, y, ss ))
+        if self.log_file:
+            print("\nLabel is {} (y={}) for vector  = \n          {}".format(res, y, ss), file = self.log_file)
+
+        #self.print_dict_data()
+
+        return res
+
+
+
+
+
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+#
+#
+class wss(svm):
+    """
+    Working set selection (WSS) for support vector machines (SVM)  (V.Vapnik and others)
 
     """
 
     eps=1e-03  # stopping tolerance
     tau=1e-12
-    insignificant_level = 0.5
+
     n_instances = 0
     log_file=None
     dbg_log=None
-
-    def __init__(self, n, m, x,y,log_file=None,dbg_log=None ):
+    #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+    #
+    #
+    def __init__(self, n, m, x,y,model_svm_file=None, log_file=None,dbg_log=None ):
         """
 
         :param n:
@@ -44,10 +197,10 @@ class wss(object):
         :param log_file:
         :param dbg_log:
         """
-
+        super().__init__(m, model_svm_file,log_file,dbg_log)
         self.n_instances = n
-        self.m=m
-        self.x_shape=( self.n_instances, self.m)
+        self.m_features=m
+        self.x_shape=( self.n_instances, self.m_features)
         self.y_shape=(self.n_instances,1)
         self.x=np.copy(x)
         self.y=np.copy(y)
@@ -62,15 +215,24 @@ class wss(object):
         pass
         self.initVectors()
 
+        return
+
+    #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+    #
+    #
     def initVectors(self):
         self.A = np.zeros((self.n_instances), dtype=np.float64)
         self.G = np.ones((self.n_instances), dtype=np.float64)
         self.G = self.G * (-1)
         self.C = 2.0
-        self.w = np.zeros((self.m), dtype=np.float64)
-        self.b = 0.0
+        #self.w = np.zeros((self.m_features), dtype=np.float64)
+        #self.b = 0.0
 
+        return
 
+    #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+    #
+    #
     def createKernel(self,kernel_type, d=1, k=1.0, c=-1.0):
         """
 
@@ -123,22 +285,27 @@ class wss(object):
                 self.Ker[i][j] = getattr(self,func)(i,j)
 
 
-        if self.log_file:
+        if self.log_file and self.dbg_log:
             print ("\n\nKernel \n", file=self.log_file)
             [print (*line, file =self.log_file) for line in self.Ker ]
-            #for i in range(self.n_instances):
-            #    for j in range(0, self.n_instances,16):
-            #        for j1 in range (j, j+16 ):
-            #            print ("{} ".format(self.Ker[i][j1]), file=self.log_file)
-            #        print("\n",file=self.log_file )
 
 
+        return
+
+    #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+    #
+    #
     def kernel2Q(self):
 
         for i in range(self.n_instances):
             for j in range(self.n_instances):
                 self.Ker[i][j]=self.Ker[i][j]*self.y[i]*self.y[j]
 
+        return
+
+    #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+    #
+    #
     def rbfgauss(self,ind_i, ind_j):
 
         if ind_i == ind_j:
@@ -148,22 +315,40 @@ class wss(object):
 
         return math.exp(-(norm*norm)/(2.0*std*std))
 
+    #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+    #
+    #
     def linear(self, ind_i, ind_j):
         return self.dot_x_y(ind_i,ind_j)
 
+    #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+    #
+    #
     def polyn(self, ind_i,ind_j):
 
         return math.pow( (self.dot_x_y(ind_i,ind_j) + 1.0), self.kernel_arg[0])
 
+    #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+    #
+    #
     def laplace(self, ind_i, ind_j):
         pass
 
+    #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+    #
+    #
     def anova(selfself, ind_i,ind_j):
         pass
 
+    #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+    #
+    #
     def sigmoid(self,ind_i,ind_j):
         pass
 
+    #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+    # Frobenius' norm calculation
+    #
     def froNorm_x_y(self,ind_i,ind_j):
         """
 
@@ -176,10 +361,12 @@ class wss(object):
         """
 
         a= self.x[ind_i] -self.x[ind_j]
-        mean=a.mean()
+        mean=a.m_featuresean()
         std=a.std()
         norm = np.linalg.norm(a)
         return mean, std,norm, a
+
+    #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
 
     def dot_x_y(self,ind_i,ind_j):
         """
@@ -192,7 +379,9 @@ class wss(object):
 
 
 
-
+    #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+    #
+    #
 
     def trainingFlow(self):
         """
@@ -265,7 +454,9 @@ class wss(object):
         return
 
 
-
+    #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+    #
+    #
 
     def selectB(self):
         """
@@ -307,7 +498,9 @@ class wss(object):
 
         return i,j
 
-
+    #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+    #
+    #
     def set_model_params(self):
 
         self.A_max = 0.0
@@ -316,7 +509,7 @@ class wss(object):
             if abs(self.A[i]) > self.A_max:
                 self.A_max=abs(self.A[i])
 
-        for j in range(self.m):
+        for j in range(self.m_features):
             self.w[j]=0.0
             for i in range(self.n_instances):
                 self.w[j]+=self.A[i]*self.y[i]*self.x[i][j]
@@ -336,7 +529,7 @@ class wss(object):
 
         if self.log_file:
             print("\n\n model \n\nb = {}\n w[] = \n".format(self.b), file=self.log_file )
-            for t in range(self.m):
+            for t in range(self.m_features):
 
                 print(self.w[t],end=" ", file=self.log_file)
                 if t>0 and t%16==0:
@@ -344,18 +537,19 @@ class wss(object):
 
 
 
+        self.saveSVMmodel(self.b,self.w,"face model. 256 faces, 256 nonfaces - training set")
+
+        return
+    #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+    #
+    #
+
     def testingFlow(self, x ):
         """
-
+        x-test instance vector of  self.m_features length
         :return:
         """
-        #ignore small  abs(A[i]) coefficients
-        # for i in range(self.n_instances):
-        #     if abs(self.A[i])<self.insignificant_level*self.A_max:
-        #         continue
 
-        #res=self.b
-        #res=res + np.dot(self.x[i],x) * self.A[i]*self.y[i]+self.b
         res=self.b + np.dot(self.w, x)
 
         if res >0.0:
@@ -365,7 +559,8 @@ class wss(object):
 
         return ret_label
 
-
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
 
 
 
@@ -380,42 +575,31 @@ def main(args, f):
     :return:
     """
 
-    input_matrix = np.array([[2.0, 4.0],
-                             [2.0, 2.0],
-                             [4.0, 2.0],
-                             [4.0, 5.0],
-                             [5.0, 9.0],
-                             [5.0, 1.0],
-                             [6.0, 4.0],
-                             [8.0, 5.0],
-                             [9.0, 1.0],
-                             [10.0,6.0],
-                             [4.0, 4.1]])
 
-    output_vector = np.array([-1, -1, -1, 1, 1, -1, 1, 1, 1, 1, 1])
+
 
     input_data, output_label, _, _ = createDataSet(pos_img_dir, neg_img_dir, train_set_pos, train_set_neg,
                                                   flatten_img_len)
 
-    a = wss(train_set_pos + train_set_neg, flatten_img_len, input_data,  output_label, f, True )
-    print(a.eps)
-    print(a.tau)
+    train = wss(train_set_pos + train_set_neg, flatten_img_len, input_data,  output_label, model_svm_file, f, True )
+    print(train.eps)
+    print(train.tau)
 
-    a.createKernel("linear")
-    a.Ker
+    train.createKernel("linear")
 
-    a.trainingFlow()
-    a.set_model_params()
+
+    train.trainingFlow()
+    train.set_model_params()
 
 
     x_test,_,title_list=createTestSet(pos_img_dir,10,256,flatten_img_len)
     #x_test=np.array([[1,1],[-2,10]])
 
-    #print(a.testingFlow(x_test[0]))
-    #(a.testingFlow( x_test[1]) )
+    #print(train.testingFlow(x_test[0]))
+    #(train.testingFlow( x_test[1]) )
 
     for i in range(10):
-        print("{} : {}".format( title_list[i], a.testingFlow(x_test[i])))
+        print("{} : {}".format( title_list[i], train.testingFlow(x_test[i])))
 
     pass
 
@@ -423,18 +607,71 @@ def main(args, f):
     x_test1,_,title_list1=createTestSet(neg_img_dir,10,256,flatten_img_len)
     #x_test=np.array([[1,1],[-2,10]])
 
-    #print(a.testingFlow(x_test[0]))
-    #(a.testingFlow( x_test[1]) )
+    #print(train.testingFlow(x_test[0]))
+    #(train.testingFlow( x_test[1]) )
 
     for i in range(10):
-        print("{} : {}".format( title_list1[i], a.testingFlow(x_test1[i])))
+        print("{} : {}".format( title_list1[i], train.testingFlow(x_test1[i])))
+
+
+
+
+    print("Examine with model")
+    if f:
+        print("\n\n\n\n\n\n\n Examine with mode \n", file = f )
+
+    exam=svm(flatten_img_len,model_svm_file,f,True)
+    exam.loadSVMmodel()
+
+    for i in range(10):
+        res = exam.examinate(x_test[i])
+        print("{} : {}".format(title_list[i], res ))
+
+    for i in range(10):
+        res=exam.examinate(x_test1[i])
+        print("{} : {}".format(title_list1[i], res ))
 
 
     pass
 
+def main1(args, f):
+
+    x_test, _, title_list = createTestSet(pos_img_dir, 10, 256, flatten_img_len)
+
+
+    x_test1, _, title_list1 = createTestSet(neg_img_dir, 10, 256, flatten_img_len)
+
+
+    print("Examine with model")
+    if f:
+        print("\n\n\n\n\n\n\n Examine with mode \n", file=f)
+
+    exam = svm(flatten_img_len, model_svm_file, f, True)
+    exam.loadSVMmodel()
+    list_res=[]
+    for i in range(10):
+        res = exam.examinate(x_test[i])
+        list_res.append((title_list[i],res))
+        #print("{} : {}".format(title_list[i], res))
+
+    for i in range(10):
+        res = exam.examinate(x_test1[i])
+        list_res.append((title_list1[i],res))
+        #print("{} : {}".format(title_list1[i], res))
+
+
+    # total log
+    print("\n\n\n\n\n      Total \n\n\n")
+    print("\n\n\n\n\n      Total \n\n\n", file=f)
+
+    for (title,res) in list_res:
+        print("title {} : {}".format(title,res))
+        print("title {} : {}".format(title, res), file = f )
+
 if __name__ == "__main__":
     f = open(LOG_FILE, 'w')
-    main(sys.argv, f)
+    #main(sys.argv, f) # training and examine
+    main1(sys.argv, f)# examine on the saved svm model base
     f.close()
 
 

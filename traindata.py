@@ -8,13 +8,17 @@ from config import pos_img_dir, neg_img_dir,flatten_img_len,train_set_pos,train_
 
 
 
-
+#---------------------------------------------------------------------------------------------------------------------->
+#
+#
 def list_img_files(base_path):
     if not isdir(base_path):
         return []
 
     return [join(base_path, f) for f in os.listdir(base_path) if isfile(join(base_path, f))]
-
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+#
+#
 def imgfile2image(imgfile):
     image = Image.open(imgfile, "r")
     image = image.convert("L")  # makes it grayscale
@@ -24,7 +28,9 @@ def imgfile2image(imgfile):
     (title,_) = os.path.splitext( os.path.basename (imgfile))
 
     return title, image, data
-
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+#
+#
 def createTestSet(imgListFolder,imgsAmount,skippedImgAmount, flattenImgLen):
     """
 
@@ -59,6 +65,9 @@ def createTestSet(imgListFolder,imgsAmount,skippedImgAmount, flattenImgLen):
 
     return test_data,test_output,title_list
 
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+#
+#
 def createDataSet(posImgListFolder, negImgListFolder,posImgsAmount,negImgsAmount,flattenImgLen):
     """
 
@@ -103,6 +112,8 @@ def createDataSet(posImgListFolder, negImgListFolder,posImgsAmount,negImgsAmount
             break
 
     return input_data,input_label, pos_title_list, neg_title_list
+
+#---------------------------------------------------------------------------------------------------------------------->
 
 
 if __name__ == "__main__":
